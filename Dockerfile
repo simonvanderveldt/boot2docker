@@ -26,8 +26,9 @@ RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v3.x/linux-$KERNEL_V
     mv /linux-$KERNEL_VERSION /linux-kernel
 
 # Download AUFS and apply patches and files, then remove it
-RUN git clone -b $AUFS_BRANCH --depth 1 http://git.code.sf.net/p/aufs/aufs3-standalone && \
+RUN git clone -b $AUFS_BRANCH http://git.code.sf.net/p/aufs/aufs3-standalone && \
     cd aufs3-standalone && \
+    git checkout b3883c3cb86937801fdd2e188032063de617ef73 && \
     cd /linux-kernel && \
     cp -r /aufs3-standalone/Documentation /linux-kernel && \
     cp -r /aufs3-standalone/fs /linux-kernel && \
@@ -35,6 +36,19 @@ RUN git clone -b $AUFS_BRANCH --depth 1 http://git.code.sf.net/p/aufs/aufs3-stan
     for patch in aufs3-kbuild aufs3-base aufs3-mmap aufs3-standalone aufs3-loopback; do \
         patch -p1 < /aufs3-standalone/$patch.patch; \
     done
+
+COPY kernel_config /linux-kernel/.config
+
+RUN cd /linux-kernel && make prepare
+
+RUN apt-get -y install libtool zlib1g-dev uuid-dev
+RUN libtoolize --force
+
+RUN dpkg --add-architecture i386
+RUN apt-get update && apt-get -y install gcc-multilib uuid-dev:i386 zlib1g-dev:i386
+
+COPY build_zfs.sh /
+RUN /build_zfs.sh
 
 COPY kernel_config /linux-kernel/.config
 

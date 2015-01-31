@@ -52,6 +52,19 @@ RUN git clone -b "$AUFS_BRANCH" "$AUFS_REPO" /aufs-standalone && \
 
 COPY kernel_config /linux-kernel/.config
 
+RUN cd /linux-kernel && make prepare
+
+RUN apt-get update && apt-get -y install libtool zlib1g-dev uuid-dev
+RUN libtoolize --force
+
+RUN dpkg --add-architecture i386
+RUN apt-get update && apt-get -y install gcc-multilib uuid-dev:i386 zlib1g-dev:i386
+
+COPY build_zfs.sh /tmp/
+RUN /tmp/build_zfs.sh
+
+COPY kernel_config /linux-kernel/.config
+
 RUN jobs=$(nproc); \
     cd /linux-kernel && \
     make -j ${jobs} oldconfig && \

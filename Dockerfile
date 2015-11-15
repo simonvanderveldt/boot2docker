@@ -19,7 +19,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  4.0.2
+ENV KERNEL_VERSION  4.0.3
 
 # Fetch the kernel sources
 RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
@@ -28,7 +28,7 @@ RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.
 # http://aufs.sourceforge.net/
 ENV AUFS_REPO       https://github.com/sfjro/aufs4-standalone
 ENV AUFS_BRANCH     aufs4.0
-ENV AUFS_COMMIT     170c7ace871c84ba70646f642003edf2d9162144
+ENV AUFS_COMMIT     5d8e529951e8ddf19d4668788d273155f721f3c2
 # we use AUFS_COMMIT to get stronger repeatability guarantees
 
 # Download AUFS and apply patches and files, then remove it
@@ -153,7 +153,7 @@ RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowide
 # Build VBox guest additions
 # For future reference, we have to use x86 versions of several of these bits because TCL doesn't support ELFCLASS64
 # (... and we can't use VBoxControl or VBoxService at all because of this)
-ENV VBOX_VERSION 4.3.26
+ENV VBOX_VERSION 4.3.28
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \

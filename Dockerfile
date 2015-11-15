@@ -6,6 +6,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         bc \
                         git \
                         build-essential \
+                        golang \
                         cpio \
                         gcc libc6 libc6-dev \
                         kmod \
@@ -19,7 +20,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  4.0.5
+ENV KERNEL_VERSION  4.0.7
 
 # Fetch the kernel sources
 RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
@@ -28,13 +29,13 @@ RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.
 # http://aufs.sourceforge.net/
 ENV AUFS_REPO       https://github.com/sfjro/aufs4-standalone
 ENV AUFS_BRANCH     aufs4.0
-ENV AUFS_COMMIT     a8c8a849e236d7f7fa121c8344899a796ccf7b8f
+ENV AUFS_COMMIT     e274de9419a0c135179244e45f3991fe5dc70b03
 # we use AUFS_COMMIT to get stronger repeatability guarantees
 
 # Download AUFS and apply patches and files, then remove it
-RUN git clone -b "$AUFS_BRANCH" "$AUFS_REPO" aufs-standalone && \
-    cd aufs-standalone && \
-    git checkout $AUFS_COMMIT && \
+RUN git clone -b "$AUFS_BRANCH" "$AUFS_REPO" /aufs-standalone && \
+    cd /aufs-standalone && \
+    git checkout -q "$AUFS_COMMIT" && \
     cd /linux-kernel && \
     cp -r /aufs-standalone/Documentation /linux-kernel && \
     cp -r /aufs-standalone/fs /linux-kernel && \
@@ -87,6 +88,8 @@ ENV TCZ_DEPS        iptables \
                     nfs-utils tcp_wrappers portmap rpcbind libtirpc \
                     curl ntpclient \
                     procps glib2 libtirpc libffi fuse pcre \
+                    udev-lib \
+                    liblvm2 \
                     parted
 
 # Make the ROOTFS
@@ -153,7 +156,7 @@ RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowide
     chmod +x $ROOTFS/usr/local/bin/generate_cert
 
 # Build VBox guest additions
-ENV VBOX_VERSION 4.3.28
+ENV VBOX_VERSION 4.3.30
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \
@@ -171,6 +174,23 @@ RUN mkdir -p /vboxguest && \
     mkdir -p $ROOTFS/sbin && \
     cp amd64/lib/VBoxGuestAdditions/mount.vboxsf $ROOTFS/sbin/
 
+# Install build dependencies for VMware Tools
+RUN apt-get update && apt-get install -y \
+        autoconf \
+        libdumbnet-dev \
+        libdumbnet1 \
+        libfuse-dev \
+        libfuse2 \
+        libfuse2 \
+        libglib2.0-0 \
+        libglib2.0-dev \
+        libmspack-dev \
+        libssl-dev \
+        libtirpc-dev \
+        libtirpc1 \
+        libtool \
+    && rm -rf /var/lib/apt/lists/*
+
 # Build VMware Tools
 ENV OVT_VERSION 9.10.0
 
@@ -178,14 +198,11 @@ ENV OVT_VERSION 9.10.0
 # rebased onto the 9.10.0 release
 ENV OVT_REPO       https://github.com/cloudnativeapps/open-vm-tools
 ENV OVT_BRANCH     stable-9.10.x-kernel4-vmhgfs-fix
+ENV OVT_COMMIT     f654bdb390dd6753985379ea7df058aa8f6294ee
 
-RUN git clone $OVT_REPO \
-    && cd /open-vm-tools \
-    && git checkout $OVT_BRANCH \
-    && mv /open-vm-tools /vmtoolsd
-
-RUN apt-get install -y libfuse2 libtool autoconf libglib2.0-dev libdumbnet-dev libdumbnet1 libfuse2 libfuse-dev libglib2.0-0 \
-       libtirpc-dev libtirpc1 libmspack-dev libssl-dev
+RUN git clone -b "$OVT_BRANCH" "$OVT_REPO" /vmtoolsd \
+    && cd /vmtoolsd \
+    && git checkout -q "$OVT_COMMIT"
 
 # Compile
 RUN cd /vmtoolsd/open-vm-tools && \
@@ -193,7 +210,7 @@ RUN cd /vmtoolsd/open-vm-tools && \
     ./configure --disable-multimon --disable-docs --disable-tests --with-gnu-ld \
                 --without-kernel-modules --without-procps --without-gtk2 \
                 --without-gtkmm --without-pam --without-x --without-icu \
-		--without-xerces --without-xmlsecurity --without-ssl && \
+                --without-xerces --without-xmlsecurity --without-ssl && \
     make LIBS="-ltirpc" CFLAGS="-Wno-implicit-function-declaration" && \
     make DESTDIR=$ROOTFS install &&\
     /vmtoolsd/open-vm-tools/libtool --finish $ROOTFS/usr/local/lib
@@ -221,9 +238,36 @@ RUN mkdir -p /vmtoolsd/${LIBDNET} &&\
     make &&\
     make install && make DESTDIR=$ROOTFS install
 
+# Download and build Parallels Tools
+ENV PRL_MAJOR 11
+ENV PRL_VERSION 11.0.0
+ENV PRL_BUILD 30916
+
+RUN mkdir -p /prl_tools && \
+    curl -L http://download.parallels.com/desktop/v${PRL_MAJOR}/${PRL_VERSION}-rtm/ParallelsTools-${PRL_VERSION}-${PRL_BUILD}-boot2docker.tar.gz \
+        | tar -xzC /prl_tools --strip-components 1 &&\
+    cd /prl_tools &&\
+    cp -Rv tools/* $ROOTFS &&\
+    \
+    KERNEL_DIR=/linux-kernel/ KVER=$KERNEL_VERSION SRC=/linux-kernel/ PRL_FREEZE_SKIP=1 \
+    make -C kmods/ -f Makefile.kmods installme &&\
+    \
+    find kmods/ -name \*.ko -exec cp {} $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/extra/ \;
+
 # Horrible hack again
 RUN cd $ROOTFS && cd usr/local/lib && ln -s libdnet.1 libdumbnet.so.1 &&\
     cd $ROOTFS && ln -s lib lib64
+
+# Build XenServer Tools
+ENV XEN_REPO https://github.com/xenserver/xe-guest-utilities
+ENV XEN_BRANCH boot2docker
+ENV XEN_COMMIT 4a9417fa61a5ca46676b7073fdb9181fe77ba56e
+
+RUN git clone -b "$XEN_BRANCH" "$XEN_REPO" /xentools \
+    && cd /xentools \
+    && git checkout -q "$XEN_COMMIT" \
+    && make \
+    && tar xvf build/dist/*.tgz -C $ROOTFS/
 
 # Make sure that all the modules we might have added are recognized (especially VBox guest additions)
 RUN depmod -a -b $ROOTFS $KERNEL_VERSION-boot2docker
@@ -272,6 +316,9 @@ RUN cd /linux-kernel && \
 
 # Make sure init scripts are executable
 RUN find $ROOTFS/etc/rc.d/ $ROOTFS/usr/local/etc/init.d/ -exec chmod +x '{}' ';'
+
+# move dhcp.sh out of init.d as we're triggering it manually so its ready a bit faster
+RUN mv $ROOTFS/etc/init.d/dhcp.sh $ROOTFS/etc/rc.d/
 
 # Change MOTD
 RUN mv $ROOTFS/usr/local/etc/motd $ROOTFS/etc/motd

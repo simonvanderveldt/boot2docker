@@ -6,7 +6,7 @@ small ~24MB download and boots in ~5s (YMMV).
 
 ## Features
 
-* Kernel 4.0.5 with AUFS, Docker v1.7.0 - using libcontainer
+* Kernel 4.0.7 with AUFS, Docker v1.7.1 - using libcontainer
 * Container persistence via disk automount on `/var/lib/docker`
 * SSH keys persistence via disk automount
 
@@ -302,6 +302,8 @@ Goto [How to build](doc/BUILD.md) for Documentation on how to build your own
 Boot2Docker ISOs.
 
 ## Troubleshooting
+
+See the [workarounds doc](https://github.com/boot2docker/boot2docker/blob/master/doc/WORKAROUNDS.md) for solutions to known issues.
 
 #### `boot2docker up` doesn't work (OSX)
 

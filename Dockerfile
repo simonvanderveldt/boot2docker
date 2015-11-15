@@ -20,7 +20,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  4.0.9
+ENV KERNEL_VERSION  4.1.10
 
 # Fetch the kernel sources
 RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
@@ -28,8 +28,8 @@ RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.
 
 # http://aufs.sourceforge.net/
 ENV AUFS_REPO       https://github.com/sfjro/aufs4-standalone
-ENV AUFS_BRANCH     aufs4.0
-ENV AUFS_COMMIT     e274de9419a0c135179244e45f3991fe5dc70b03
+ENV AUFS_BRANCH     aufs4.1
+ENV AUFS_COMMIT     aaab40d6b4680f4ba8aa62a043a96ca550d85cb5
 # we use AUFS_COMMIT to get stronger repeatability guarantees
 
 # Download AUFS and apply patches and files, then remove it
@@ -117,7 +117,7 @@ RUN cd $ROOTFS/lib/modules && \
     rm -rf ./*/kernel/net/wireless/*
 
 # Install libcap
-RUN curl -L http://http.debian.net/debian/pool/main/libc/libcap2/libcap2_2.22.orig.tar.gz | tar -C / -xz && \
+RUN curl -fL http://http.debian.net/debian/pool/main/libc/libcap2/libcap2_2.22.orig.tar.gz | tar -C / -xz && \
     cd /libcap-2.22 && \
     sed -i 's/LIBATTR := yes/LIBATTR := no/' Make.Rules && \
     make && \
@@ -141,26 +141,26 @@ RUN cd /linux-kernel && \
 RUN cp -v /linux-kernel/arch/x86_64/boot/bzImage /tmp/iso/boot/vmlinuz64
 
 # Download the rootfs, don't unpack it though:
-RUN curl -L -o /tcl_rootfs.gz $TCL_REPO_BASE/release/distribution_files/rootfs64.gz
+RUN curl -fL -o /tcl_rootfs.gz $TCL_REPO_BASE/release/distribution_files/rootfs64.gz
 
 # Install the TCZ dependencies
 RUN for dep in $TCZ_DEPS; do \
     echo "Download $TCL_REPO_BASE/tcz/$dep.tcz" &&\
-        curl -L -o /tmp/$dep.tcz $TCL_REPO_BASE/tcz/$dep.tcz && \
+        curl -fL -o /tmp/$dep.tcz $TCL_REPO_BASE/tcz/$dep.tcz && \
         unsquashfs -f -d $ROOTFS /tmp/$dep.tcz && \
         rm -f /tmp/$dep.tcz ;\
     done
 
 # get generate_cert
-RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowideit/generate_cert/releases/download/0.2/generate_cert-0.2-linux-amd64 && \
+RUN curl -fL -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowideit/generate_cert/releases/download/0.2/generate_cert-0.2-linux-amd64 && \
     chmod +x $ROOTFS/usr/local/bin/generate_cert
 
 # Build VBox guest additions
-ENV VBOX_VERSION 5.0.4
+ENV VBOX_VERSION 5.0.6
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \
-    curl -L -o vboxguest.iso http://download.virtualbox.org/virtualbox/${VBOX_VERSION}/VBoxGuestAdditions_${VBOX_VERSION}.iso && \
+    curl -fL -o vboxguest.iso http://download.virtualbox.org/virtualbox/${VBOX_VERSION}/VBoxGuestAdditions_${VBOX_VERSION}.iso && \
     7z x vboxguest.iso -ir'!VBoxLinuxAdditions.run' && \
     rm vboxguest.iso && \
     \
@@ -194,20 +194,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Build VMware Tools
-ENV OVT_VERSION 9.10.0
+ENV OVT_VERSION 10.0.0-3000743
 
-# use fixes for post 3.19 and 4.0 kernels from https://github.com/davispuh/open-vm-tools/tree/fixed and http://git.io/vIXpn
-# rebased onto the 9.10.0 release
-ENV OVT_REPO       https://github.com/cloudnativeapps/open-vm-tools
-ENV OVT_BRANCH     stable-9.10.x-kernel4-vmhgfs-fix
-ENV OVT_COMMIT     f654bdb390dd6753985379ea7df058aa8f6294ee
+RUN curl --retry 10 -fsSL "https://github.com/vmware/open-vm-tools/archive/open-vm-tools-${OVT_VERSION}.tar.gz" | tar -xz --strip-components=1 -C /
 
-RUN git clone -b "$OVT_BRANCH" "$OVT_REPO" /vmtoolsd \
-    && cd /vmtoolsd \
-    && git checkout -q "$OVT_COMMIT"
-
-# Compile
-RUN cd /vmtoolsd/open-vm-tools && \
+# Compile user space components, we're no longer building kernel module as we're
+# now bundling FUSE shared folders support.
+RUN cd /open-vm-tools && \
     autoreconf -i && \
     ./configure --disable-multimon --disable-docs --disable-tests --with-gnu-ld \
                 --without-kernel-modules --without-procps --without-gtk2 \
@@ -215,36 +208,27 @@ RUN cd /vmtoolsd/open-vm-tools && \
                 --without-xerces --without-xmlsecurity --without-ssl && \
     make LIBS="-ltirpc" CFLAGS="-Wno-implicit-function-declaration" && \
     make DESTDIR=$ROOTFS install &&\
-    /vmtoolsd/open-vm-tools/libtool --finish $ROOTFS/usr/local/lib
+    /open-vm-tools/libtool --finish $ROOTFS/usr/local/lib
 
-# Kernel modules to build and install
-ENV VM_MODULES  vmhgfs
-
-RUN cd /vmtoolsd/open-vm-tools &&\
-    TOPDIR=$PWD &&\
-    for module in $VM_MODULES; do \
-        cd modules/linux/$module; \
-        make -C /linux-kernel modules M=$PWD VM_CCVER=$(gcc -dumpversion) HEADER_DIR="/linux-kernel/include" SRCROOT=$PWD OVT_SOURCE_DIR=$TOPDIR; \
-        cd -; \
-    done && \
-    for module in $VM_MODULES; do \
-        make -C /linux-kernel INSTALL_MOD_PATH=$ROOTFS modules_install M=$PWD/modules/linux/$module; \
-    done
-
+# Building the Libdnet library for VMware Tools.
 ENV LIBDNET libdnet-1.12
-RUN curl -L -o /tmp/${LIBDNET}.zip https://github.com/dugsong/libdnet/archive/${LIBDNET}.zip &&\
+RUN curl -fL -o /tmp/${LIBDNET}.zip https://github.com/dugsong/libdnet/archive/${LIBDNET}.zip &&\
     unzip /tmp/${LIBDNET}.zip -d /vmtoolsd &&\
     cd /vmtoolsd/libdnet-${LIBDNET} && ./configure --build=i486-pc-linux-gnu &&\
     make &&\
     make install && make DESTDIR=$ROOTFS install
 
+# Horrible hack again
+RUN cd $ROOTFS && cd usr/local/lib && ln -s libdnet.1 libdumbnet.so.1 &&\
+    cd $ROOTFS && ln -s lib lib64
+
 # Download and build Parallels Tools
 ENV PRL_MAJOR 11
-ENV PRL_VERSION 11.0.0
-ENV PRL_BUILD 30916
+ENV PRL_VERSION 11.0.1
+ENV PRL_BUILD 31277
 
 RUN mkdir -p /prl_tools && \
-    curl -L http://download.parallels.com/desktop/v${PRL_MAJOR}/${PRL_VERSION}-rtm/ParallelsTools-${PRL_VERSION}-${PRL_BUILD}-boot2docker.tar.gz \
+    curl -fL http://download.parallels.com/desktop/v${PRL_MAJOR}/${PRL_VERSION}/ParallelsTools-${PRL_VERSION}-${PRL_BUILD}-boot2docker.tar.gz \
         | tar -xzC /prl_tools --strip-components 1 &&\
     cd /prl_tools &&\
     cp -Rv tools/* $ROOTFS &&\
@@ -253,10 +237,6 @@ RUN mkdir -p /prl_tools && \
     make -C kmods/ -f Makefile.kmods installme &&\
     \
     find kmods/ -name \*.ko -exec cp {} $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/extra/ \;
-
-# Horrible hack again
-RUN cd $ROOTFS && cd usr/local/lib && ln -s libdnet.1 libdumbnet.so.1 &&\
-    cd $ROOTFS && ln -s lib lib64
 
 # Build XenServer Tools
 ENV XEN_REPO https://github.com/xenserver/xe-guest-utilities
@@ -277,7 +257,7 @@ RUN cp -v $ROOTFS/etc/version /tmp/iso/version
 
 # Get the Docker version that matches our boot2docker version
 # Note: `docker version` returns non-true when there is no server to ask
-RUN curl -L -o $ROOTFS/usr/local/bin/docker https://get.docker.com/builds/Linux/x86_64/docker-$(cat $ROOTFS/etc/version) && \
+RUN curl -fL -o $ROOTFS/usr/local/bin/docker https://get.docker.com/builds/Linux/x86_64/docker-$(cat $ROOTFS/etc/version) && \
     chmod +x $ROOTFS/usr/local/bin/docker && \
     { $ROOTFS/usr/local/bin/docker version || true; }
 

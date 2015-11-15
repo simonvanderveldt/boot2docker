@@ -6,7 +6,7 @@ small ~24MB download and boots in ~5s (YMMV).
 
 ## Features
 
-* Kernel 3.18.11 with AUFS, Docker v1.6.0 - using libcontainer
+* Kernel 4.0.2 with AUFS, Docker v1.6.1 - using libcontainer
 * Container persistence via disk automount on `/var/lib/docker`
 * SSH keys persistence via disk automount
 
@@ -176,6 +176,15 @@ You will find the "data" volume mounted as "/data" in that container. Note that
 the "samba" container that refers to it by name. So, in this example, if you
 were on OS-X you now have /Volumes/data and /data in container being shared. You
 can change the paths as needed.
+
+##### Installing secure Registry certificates
+
+You can add your Registry server's public certificate (in `.pem` format) into
+the `/var/lib/boot2docker/certs/` directory, and Boot2Docker will automatically
+load it from the persistence partition at boot.
+
+You may need to add several certificates (as separate `.pem` files) to this
+directory, depending on the CA signing chain used for your certificate.
 
 ##### Insecure Registry
 

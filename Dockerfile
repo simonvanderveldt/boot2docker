@@ -1,5 +1,4 @@
-FROM debian:wheezy
-MAINTAINER Steeve Morin "steeve.morin@gmail.com"
+FROM debian:jessie
 
 RUN apt-get update && apt-get -y install  unzip \
                         xz-utils \
@@ -14,31 +13,40 @@ RUN apt-get update && apt-get -y install  unzip \
                         genisoimage \
                         xorriso \
                         syslinux \
+                        isolinux \
                         automake \
                         pkg-config \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  3.18.11
-# http://sourceforge.net/p/aufs/aufs3-standalone/ref/master/branches/
-ENV AUFS_BRANCH     aufs3.18.1+
-ENV AUFS_COMMIT     863c3b76303a1ebea5b6a5b1b014715ac416f913
-# we use AUFS_COMMIT to get stronger repeatability guarantees
+ENV KERNEL_VERSION  4.0.2
 
 # Fetch the kernel sources
-RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v3.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
+RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
     mv /linux-$KERNEL_VERSION /linux-kernel
 
+# http://aufs.sourceforge.net/
+ENV AUFS_REPO       https://github.com/sfjro/aufs4-standalone
+ENV AUFS_BRANCH     aufs4.0
+ENV AUFS_COMMIT     170c7ace871c84ba70646f642003edf2d9162144
+# we use AUFS_COMMIT to get stronger repeatability guarantees
+
 # Download AUFS and apply patches and files, then remove it
-RUN git clone -b $AUFS_BRANCH http://git.code.sf.net/p/aufs/aufs3-standalone && \
-    cd aufs3-standalone && \
+RUN git clone -b "$AUFS_BRANCH" "$AUFS_REPO" aufs-standalone && \
+    cd aufs-standalone && \
     git checkout $AUFS_COMMIT && \
     cd /linux-kernel && \
-    cp -r /aufs3-standalone/Documentation /linux-kernel && \
-    cp -r /aufs3-standalone/fs /linux-kernel && \
-    cp -r /aufs3-standalone/include/uapi/linux/aufs_type.h /linux-kernel/include/uapi/linux/ &&\
-    for patch in aufs3-kbuild aufs3-base aufs3-mmap aufs3-standalone aufs3-loopback; do \
-        patch -p1 < /aufs3-standalone/$patch.patch; \
+    cp -r /aufs-standalone/Documentation /linux-kernel && \
+    cp -r /aufs-standalone/fs /linux-kernel && \
+    cp -r /aufs-standalone/include/uapi/linux/aufs_type.h /linux-kernel/include/uapi/linux/ && \
+    set -e && for patch in \
+        /aufs-standalone/aufs*-kbuild.patch \
+        /aufs-standalone/aufs*-base.patch \
+        /aufs-standalone/aufs*-mmap.patch \
+        /aufs-standalone/aufs*-standalone.patch \
+        /aufs-standalone/aufs*-loopback.patch \
+    ; do \
+        patch -p1 < "$patch"; \
     done
 
 COPY kernel_config /linux-kernel/.config
@@ -75,7 +83,8 @@ ENV TCZ_DEPS        iptables \
                     xz liblzma \
                     git expat2 libiconv libidn libgpg-error libgcrypt libssh2 \
                     nfs-utils tcp_wrappers portmap rpcbind libtirpc \
-                    curl ntpclient
+                    curl ntpclient \
+                    procps glib2 libtirpc libffi fuse
 
 # Make the ROOTFS
 RUN mkdir -p $ROOTFS
@@ -118,7 +127,7 @@ RUN cd /linux-kernel && \
     cd / && \
     git clone http://git.code.sf.net/p/aufs/aufs-util && \
     cd /aufs-util && \
-    git checkout aufs3.9 && \
+    git checkout aufs4.0 && \
     CPPFLAGS="-m32 -I/tmp/kheaders/include" CLFAGS=$CPPFLAGS LDFLAGS=$CPPFLAGS make && \
     DESTDIR=$ROOTFS make install && \
     rm -rf /tmp/kheaders
@@ -158,13 +167,60 @@ RUN mkdir -p /vboxguest && \
     rm VBoxGuestAdditions*.tar.bz2 && \
     \
     KERN_DIR=/linux-kernel/ make -C amd64/src/vboxguest-${VBOX_VERSION} && \
-    cp amd64/src/vboxguest-${VBOX_VERSION}/*.ko $ROOTFS/lib/modules/$KERNEL_VERSION-tinycore64/ && \
+    cp amd64/src/vboxguest-${VBOX_VERSION}/*.ko $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/ && \
     \
     mkdir -p $ROOTFS/sbin && \
     cp x86/lib/VBoxGuestAdditions/mount.vboxsf $ROOTFS/sbin/
 
+# Build VMware Tools
+ENV OVT_VERSION 9.4.6-1770165
+
+# Download and prepare ovt source
+RUN mkdir -p /vmtoolsd/open-vm-tools \
+    && curl -L http://downloads.sourceforge.net/open-vm-tools/open-vm-tools-$OVT_VERSION.tar.gz \
+        | tar -xzC /vmtoolsd/open-vm-tools --strip-components 1
+
+# Apply patches to make open-vm-tools compile with a recent 3.18.x kernel and
+# a network script that knows how to plumb/unplumb nics on a busybox system,
+# this will be removed once a new ovt version is released.
+RUN cd /vmtoolsd && \
+    curl -L -o open-vm-tools-3.x.x-patches.patch https://gist.github.com/frapposelli/5506651fa6f3d25d5760/raw/475f8fb2193549c10a477d506de40639b04fa2a7/open-vm-tools-3.x.x-patches.patch &&\
+    patch -p1 < open-vm-tools-3.x.x-patches.patch && rm open-vm-tools-3.x.x-patches.patch
+
+RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y libfuse2 libtool autoconf \
+                                                                         libglib2.0-dev libdumbnet-dev:i386 \
+                                                                         libdumbnet1:i386 libfuse2:i386 libfuse-dev \
+                                                                         libglib2.0-0:i386 libtirpc-dev libtirpc1:i386
+
+# Horrible Hack
+RUN ln -s /lib/i386-linux-gnu/libglib-2.0.so.0 /lib/i386-linux-gnu/libglib-2.0.so &&\
+    ln -s /lib/i386-linux-gnu/libtirpc.so.1 /lib/i386-linux-gnu/libtirpc.so &&\
+    ln -s /usr/lib/i386-linux-gnu/libgthread-2.0.so.0 /usr/lib/i386-linux-gnu/libgthread-2.0.so &&\
+    ln -s /usr/lib/i386-linux-gnu/libgmodule-2.0.so.0 /usr/lib/i386-linux-gnu/libgmodule-2.0.so &&\
+    ln -s /usr/lib/i386-linux-gnu/libgobject-2.0.so.0 /usr/lib/i386-linux-gnu/libgobject-2.0.so &&\
+    ln -s /lib/i386-linux-gnu/libfuse.so.2 /lib/i386-linux-gnu/libfuse.so
+
+# Compile open-vm-tools
+RUN cd /vmtoolsd/open-vm-tools && autoreconf -i &&\
+    CC="gcc -m32" CXX="g++ -m32" ./configure --host=i486-pc-linux-gnu --build=i486-pc-linux-gnu \
+                --without-kernel-modules --without-pam --without-procps --without-x --without-icu &&\
+    make CC="gcc -m32" CXX="g++ -m32" LIBS="-ltirpc" CFLAGS="-Wno-implicit-function-declaration" &&\
+    make DESTDIR=$ROOTFS install
+
+# Download and compile libdnet as open-vm-tools rely on it.
+ENV LIBDNET libdnet-1.11
+
+RUN mkdir -p /vmtoolsd/${LIBDNET} &&\
+    curl -L http://sourceforge.net/projects/libdnet/files/libdnet/${LIBDNET}/${LIBDNET}.tar.gz \
+        | tar -xzC /vmtoolsd/${LIBDNET} --strip-components 1 &&\
+    cd /vmtoolsd/${LIBDNET} && ./configure --build=i486-pc-linux-gnu &&\
+    make CC="gcc -m32" CXX="g++ -m32" &&\
+    make install && make DESTDIR=$ROOTFS install
+
+RUN cd $ROOTFS && cd usr/local/lib && ln -s libdnet.1 libdumbnet.so.1
+
 # Make sure that all the modules we might have added are recognized (especially VBox guest additions)
-RUN depmod -a -b $ROOTFS $KERNEL_VERSION-tinycore64
+RUN depmod -a -b $ROOTFS $KERNEL_VERSION-boot2docker
 
 COPY VERSION $ROOTFS/etc/version
 RUN cp -v $ROOTFS/etc/version /tmp/iso/version

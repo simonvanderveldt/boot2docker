@@ -20,7 +20,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  4.0.7
+ENV KERNEL_VERSION  4.0.9
 
 # Fetch the kernel sources
 RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
@@ -130,9 +130,9 @@ RUN curl -L http://http.debian.net/debian/pool/main/libc/libcap2/libcap2_2.22.or
 RUN cd /linux-kernel && \
     make INSTALL_HDR_PATH=/tmp/kheaders headers_install && \
     cd / && \
-    git clone http://git.code.sf.net/p/aufs/aufs-util && \
+    git clone https://github.com/Distrotech/aufs-util.git && \
     cd /aufs-util && \
-    git checkout aufs4.0 && \
+    git checkout 5e0c348bd8b1898beb1e043b026bcb0e0c7b0d54 && \
     CPPFLAGS="-I/tmp/kheaders/include" CLFAGS=$CPPFLAGS LDFLAGS=$CPPFLAGS make && \
     DESTDIR=$ROOTFS make install && \
     rm -rf /tmp/kheaders
@@ -152,11 +152,11 @@ RUN for dep in $TCZ_DEPS; do \
     done
 
 # get generate_cert
-RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowideit/generate_cert/releases/download/0.1/generate_cert-0.1-linux-386/ && \
+RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowideit/generate_cert/releases/download/0.2/generate_cert-0.2-linux-amd64 && \
     chmod +x $ROOTFS/usr/local/bin/generate_cert
 
 # Build VBox guest additions
-ENV VBOX_VERSION 4.3.30
+ENV VBOX_VERSION 5.0.0
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \
@@ -229,12 +229,10 @@ RUN cd /vmtoolsd/open-vm-tools &&\
         make -C /linux-kernel INSTALL_MOD_PATH=$ROOTFS modules_install M=$PWD/modules/linux/$module; \
     done
 
-ENV LIBDNET libdnet-1.11
-
-RUN mkdir -p /vmtoolsd/${LIBDNET} &&\
-    curl -L http://sourceforge.net/projects/libdnet/files/libdnet/${LIBDNET}/${LIBDNET}.tar.gz \
-        | tar -xzC /vmtoolsd/${LIBDNET} --strip-components 1 &&\
-    cd /vmtoolsd/${LIBDNET} && ./configure --build=i486-pc-linux-gnu &&\
+ENV LIBDNET libdnet-1.12
+RUN curl -L -o /tmp/${LIBDNET}.zip https://github.com/dugsong/libdnet/archive/${LIBDNET}.zip &&\
+    unzip /tmp/${LIBDNET}.zip -d /vmtoolsd &&\
+    cd /vmtoolsd/libdnet-${LIBDNET} && ./configure --build=i486-pc-linux-gnu &&\
     make &&\
     make install && make DESTDIR=$ROOTFS install
 

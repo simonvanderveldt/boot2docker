@@ -78,7 +78,7 @@ ENV TCL_REPO_BASE   http://tinycorelinux.net/6.x/x86_64
 # Note that the ncurses is here explicitly so that top continues to work
 ENV TCZ_DEPS        iptables \
                     iproute2 \
-                    openssh openssl-1.0.0 \
+                    openssh openssl \
                     tar \
                     gcc_libs \
                     ncurses \
@@ -156,7 +156,7 @@ RUN curl -L -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowide
     chmod +x $ROOTFS/usr/local/bin/generate_cert
 
 # Build VBox guest additions
-ENV VBOX_VERSION 5.0.0
+ENV VBOX_VERSION 5.0.4
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \
@@ -172,7 +172,9 @@ RUN mkdir -p /vboxguest && \
     cp amd64/src/vboxguest-${VBOX_VERSION}/*.ko $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/ && \
     \
     mkdir -p $ROOTFS/sbin && \
-    cp amd64/lib/VBoxGuestAdditions/mount.vboxsf $ROOTFS/sbin/
+    cp amd64/lib/VBoxGuestAdditions/mount.vboxsf amd64/sbin/VBoxService $ROOTFS/sbin/ && \
+    mkdir -p $ROOTFS/bin && \
+    cp amd64/bin/VBoxClient amd64/bin/VBoxControl $ROOTFS/bin/
 
 # Install build dependencies for VMware Tools
 RUN apt-get update && apt-get install -y \
@@ -275,7 +277,7 @@ RUN cp -v $ROOTFS/etc/version /tmp/iso/version
 
 # Get the Docker version that matches our boot2docker version
 # Note: `docker version` returns non-true when there is no server to ask
-RUN curl -L -o $ROOTFS/usr/local/bin/docker https://get.docker.io/builds/Linux/x86_64/docker-$(cat $ROOTFS/etc/version) && \
+RUN curl -L -o $ROOTFS/usr/local/bin/docker https://get.docker.com/builds/Linux/x86_64/docker-$(cat $ROOTFS/etc/version) && \
     chmod +x $ROOTFS/usr/local/bin/docker && \
     { $ROOTFS/usr/local/bin/docker version || true; }
 

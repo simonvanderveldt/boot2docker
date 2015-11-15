@@ -20,7 +20,7 @@ RUN apt-get update && apt-get -y install  unzip \
                         p7zip-full
 
 # https://www.kernel.org/
-ENV KERNEL_VERSION  4.1.10
+ENV KERNEL_VERSION  4.1.12
 
 # Fetch the kernel sources
 RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-$KERNEL_VERSION.tar.xz | tar -C / -xJ && \
@@ -29,7 +29,7 @@ RUN curl --retry 10 https://www.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.
 # http://aufs.sourceforge.net/
 ENV AUFS_REPO       https://github.com/sfjro/aufs4-standalone
 ENV AUFS_BRANCH     aufs4.1
-ENV AUFS_COMMIT     aaab40d6b4680f4ba8aa62a043a96ca550d85cb5
+ENV AUFS_COMMIT     1724fe65683d126a92c6baeea0b3c7d0306c63ef
 # we use AUFS_COMMIT to get stronger repeatability guarantees
 
 # Download AUFS and apply patches and files, then remove it
@@ -156,7 +156,7 @@ RUN curl -fL -o $ROOTFS/usr/local/bin/generate_cert https://github.com/SvenDowid
     chmod +x $ROOTFS/usr/local/bin/generate_cert
 
 # Build VBox guest additions
-ENV VBOX_VERSION 5.0.6
+ENV VBOX_VERSION 5.0.8
 RUN mkdir -p /vboxguest && \
     cd /vboxguest && \
     \
@@ -224,8 +224,8 @@ RUN cd $ROOTFS && cd usr/local/lib && ln -s libdnet.1 libdumbnet.so.1 &&\
 
 # Download and build Parallels Tools
 ENV PRL_MAJOR 11
-ENV PRL_VERSION 11.0.1
-ENV PRL_BUILD 31277
+ENV PRL_VERSION 11.0.2
+ENV PRL_BUILD 31348
 
 RUN mkdir -p /prl_tools && \
     curl -fL http://download.parallels.com/desktop/v${PRL_MAJOR}/${PRL_VERSION}/ParallelsTools-${PRL_VERSION}-${PRL_BUILD}-boot2docker.tar.gz \
@@ -236,7 +236,7 @@ RUN mkdir -p /prl_tools && \
     KERNEL_DIR=/linux-kernel/ KVER=$KERNEL_VERSION SRC=/linux-kernel/ PRL_FREEZE_SKIP=1 \
     make -C kmods/ -f Makefile.kmods installme &&\
     \
-    find kmods/ -name \*.ko -exec cp {} $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/extra/ \;
+    find kmods/ -name \*.ko -exec cp {} $ROOTFS/lib/modules/$KERNEL_VERSION-boot2docker/ \;
 
 # Build XenServer Tools
 ENV XEN_REPO https://github.com/xenserver/xe-guest-utilities
@@ -259,7 +259,7 @@ RUN cp -v $ROOTFS/etc/version /tmp/iso/version
 # Note: `docker version` returns non-true when there is no server to ask
 RUN curl -fL -o $ROOTFS/usr/local/bin/docker https://get.docker.com/builds/Linux/x86_64/docker-$(cat $ROOTFS/etc/version) && \
     chmod +x $ROOTFS/usr/local/bin/docker && \
-    { $ROOTFS/usr/local/bin/docker version || true; }
+    $ROOTFS/usr/local/bin/docker -v
 
 # Get the git versioning info
 COPY .git /git/.git
@@ -320,6 +320,10 @@ RUN echo "#!/bin/sh" > $ROOTFS/usr/local/bin/autologin && \
 
 # fix "su -"
 RUN echo root > $ROOTFS/etc/sysconfig/superuser
+
+# add some timezone files so we're explicit about being UTC
+RUN echo 'UTC' > $ROOTFS/etc/timezone \
+	&& cp -L /usr/share/zoneinfo/UTC $ROOTFS/etc/localtime
 
 # crontab
 COPY rootfs/crontab $ROOTFS/var/spool/cron/crontabs/root

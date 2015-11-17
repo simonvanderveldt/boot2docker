@@ -10,12 +10,12 @@
 # SPL version v0.6.3-50_g917fef2
 git clone https://github.com/zfsonlinux/spl.git /zfs/spl
 cd /zfs/spl
-git checkout 917fef273295616c563bbb0a5f6986cfce543d2f
+git checkout spl-0.6.5.3
 
 #ZFS version v0.6.3-141_g5f91bd3
 git clone https://github.com/zfsonlinux/zfs.git /zfs/zfs
 cd /zfs/zfs
-git checkout 5f91bd3dea49a529e87e0aa39595f074fd09736a
+git checkout zfs-0.6.5.3
 
 
 # Configure and compile SPL kernel module
@@ -43,7 +43,7 @@ cd /zfs/spl
     --with-linux-obj=/linux-kernel \
     --with-config=user \
     --build=x86_64-pc-linux-gnu \
-    --host=i686-pc-linux-gnu "CFLAGS=-m32" "CXXFLAGS=-m32" "LDFLAGS=-m32"
+    --host=x86_64-pc-linux-gnu
 make
 make install DESTDIR=/rootfs
 
@@ -76,6 +76,6 @@ cd /zfs/zfs
     --with-spl-obj=/zfs/spl \
     --with-config=user \
     --build=x86_64-pc-linux-gnu \
-    --host=i686-pc-linux-gnu "CFLAGS=-m32" "CXXFLAGS=-m32" "LDFLAGS=-m32"
+    --host=x86_64-pc-linux-gnu
 make
 make install DESTDIR=/rootfs

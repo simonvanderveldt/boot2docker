@@ -54,7 +54,7 @@ COPY kernel_config /linux-kernel/.config
 
 RUN cd /linux-kernel && make prepare
 
-RUN apt-get -y install libtool zlib1g-dev uuid-dev
+RUN apt-get update && apt-get -y install libtool zlib1g-dev uuid-dev
 RUN libtoolize --force
 
 RUN dpkg --add-architecture i386

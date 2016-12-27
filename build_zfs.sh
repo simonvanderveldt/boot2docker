@@ -7,16 +7,15 @@
 # SPL=y
 # ZFS=y
 
-# SPL version v0.6.3-50_g917fef2
+# Download SPL
 git clone https://github.com/zfsonlinux/spl.git /zfs/spl
 cd /zfs/spl
-git checkout spl-0.6.5.3
+git checkout spl-0.6.5.8
 
-#ZFS version v0.6.3-141_g5f91bd3
+# Download ZFS
 git clone https://github.com/zfsonlinux/zfs.git /zfs/zfs
 cd /zfs/zfs
-git checkout zfs-0.6.5.3
-
+git checkout zfs-0.6.5.8
 
 # Configure and compile SPL kernel module
 cd /zfs/spl

@@ -60,8 +60,8 @@ RUN libtoolize --force
 RUN dpkg --add-architecture i386
 RUN apt-get update && apt-get -y install gcc-multilib uuid-dev:i386 zlib1g-dev:i386
 
-COPY build_zfs.sh /
-RUN /build_zfs.sh
+COPY build_zfs.sh /tmp/
+RUN /tmp/build_zfs.sh
 
 COPY kernel_config /linux-kernel/.config
 

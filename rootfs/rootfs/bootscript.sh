@@ -1,6 +1,7 @@
 #!/bin/sh
 
 # Configure sysctl
+modprobe ipv6
 /etc/rc.d/sysctl
 
 # Load TCE extensions

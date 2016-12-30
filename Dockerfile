@@ -329,8 +329,9 @@ RUN cd /linux-kernel && \
 # Make sure init scripts are executable
 RUN find $ROOTFS/etc/rc.d/ $ROOTFS/usr/local/etc/init.d/ -exec chmod +x '{}' ';'
 
-# move dhcp.sh out of init.d as we're triggering it manually so its ready a bit faster
-RUN mv $ROOTFS/etc/init.d/dhcp.sh $ROOTFS/etc/rc.d/
+# Fix DHCP so we can ensure it's finished before our customisations that need a working network interface are started
+COPY make-dhcp-synchronous.patch /tmp/
+RUN patch -p1 --no-backup-if-mismatch -d $ROOTFS -i /tmp/make-dhcp-synchronous.patch
 
 # Change MOTD
 RUN mv $ROOTFS/usr/local/etc/motd $ROOTFS/etc/motd

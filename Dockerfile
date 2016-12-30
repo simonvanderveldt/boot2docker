@@ -334,8 +334,9 @@ RUN ln -svT /usr/local/etc/acpi "$ROOTFS/etc/acpi" \
 # Make sure init scripts are executable
 RUN find "$ROOTFS/etc/rc.d/" "$ROOTFS/usr/local/etc/init.d/" -type f -exec chmod --changes +x '{}' +
 
-# move dhcp.sh out of init.d as we're triggering it manually so its ready a bit faster
-RUN mv -v "$ROOTFS/etc/init.d/dhcp.sh" "$ROOTFS/etc/rc.d/"
+# Fix DHCP so we can ensure it's finished before our customisations that need a working network interface are started
+COPY make-dhcp-synchronous.patch /tmp/
+RUN patch -p1 --no-backup-if-mismatch -d $ROOTFS -i /tmp/make-dhcp-synchronous.patch
 
 # Add serial console
 RUN set -ex; \

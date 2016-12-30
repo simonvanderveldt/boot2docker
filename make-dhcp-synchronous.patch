@@ -1,0 +1,32 @@
+Author: Simon van der Veldt <simon.vanderveldt@gmail.com>
+Date:   Fri Dec 30 14:09:46 2016 +0100
+
+    Small patch that makes the executing of udhcpc from dhcp.sh synchronous
+    To make sure that the network is up/DHCP is done before the boot2docker
+    specific customisations are executed
+
+diff --git a/etc/init.d/dhcp.sh b/etc/init.d/dhcp.sh
+index 94a379b..b42ccdf 100755
+--- a/etc/init.d/dhcp.sh
++++ b/etc/init.d/dhcp.sh
+@@ -15,7 +15,7 @@ for DEVICE in $NETDEVICES; do
+   if [ "$?" != 0 ]; then
+ #   echo -e "\n${GREEN}Network device ${MAGENTA}$DEVICE${GREEN} detected, DHCP broadcasting for IP.${NORMAL}"
+     trap 2 3 11
+-    /sbin/udhcpc -b -i $DEVICE -x hostname:$(/bin/hostname) -p /var/run/udhcpc.$DEVICE.pid >/dev/null 2>&1 &
++    /sbin/udhcpc -A 60 -i $DEVICE -x hostname:$(/bin/hostname) -p /var/run/udhcpc.$DEVICE.pid >/dev/null 2>&1 &
+     trap "" 2 3 11
+     sleep 1
+   fi
+diff --git a/etc/init.d/tc-config b/etc/init.d/tc-config
+index 314ffc6..33a11dd 100755
+--- a/etc/init.d/tc-config
++++ b/etc/init.d/tc-config
+@@ -682,7 +682,7 @@ fi
+ if [ -n "$NODHCP" ]; then
+ 	echo "${GREEN}Skipping DHCP broadcast/network detection as requested on boot commandline.${NORMAL}"
+ else
+-	[ -z "$DHCP_RAN" ] && /etc/init.d/dhcp.sh &
++	[ -z "$DHCP_RAN" ] && /etc/init.d/dhcp.sh
+ 	[ -z "$NORTC" ] || /etc/init.d/settime.sh &
+ fi
